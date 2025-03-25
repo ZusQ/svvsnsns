@@ -2,102 +2,75 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local GitHubToken = "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"
-local RepoOwner = "Phatdepzaicrystal"
-local RepoName = "Key"
-local KeyFilePath = "keys.json"
-local RawKeyFileURL = "https://raw.githubusercontent.com/" .. RepoOwner .. "/" .. RepoName .. "/main/" .. KeyFilePath
-local APIKeyFileURL = "https://api.github.com/repos/" .. RepoOwner .. "/" .. RepoName .. "/contents/" .. KeyFilePath
+local HWID = gethwid and gethwid() or "Unknown" -- Lấy HWID
+local KeyFileURL = "https://raw.githubusercontent.com/Phatdepzaicrystal/Key/main/keys.json" -- 🔥 Link chứa key
+local DiscordWebhook = "https://discord.com/api/webhooks/1354018477828210788/2VNzzC5fY4zFB291hfDjfLAip541-zcNxF-H0IJNAp6a6nUBf9mKxu6TnjRPSPPrG4o9" -- 🔥 Webhook Discord
 
-local HWID = gethwid and gethwid() or "Unknown"
-
+-- Tải danh sách key từ GitHub
 local function GetKeys()
     local success, response = pcall(function()
-        return game:HttpGet(RawKeyFileURL)
+        return HttpService:GetAsync(KeyFileURL)
     end)
 
-    if success and response then
-        return HttpService:JSONDecode(response)
+    if success then
+        local keysData = HttpService:JSONDecode(response)
+        return keysData
     else
         warn("⚠️ Lỗi tải danh sách key từ GitHub!")
         return nil
     end
 end
 
-local function GetFileSHA()
-    local success, response = pcall(function()
-        return game:HttpGet(APIKeyFileURL)
-    end)
-
-    if success and response then
-        local jsonResponse = HttpService:JSONDecode(response)
-        return jsonResponse.sha
-    else
-        warn("⚠️ Lỗi lấy SHA file trên GitHub!")
-        return nil
-    end
-end
-
-local function EncodeBase64(data)
-    return game:HttpGet("https://api64.ipify.org?format=json&data=" .. HttpService:JSONEncode(data))
-end
-
-local function UpdateKeys(keys)
-    local sha = GetFileSHA()
-    if not sha then
-        warn("⚠️ Không lấy được SHA file trên GitHub!")
-        return
-    end
-
-    local headers = {
-        ["Authorization"] = "token " .. GitHubToken,
-        ["Accept"] = "application/vnd.github.v3+json",
-        ["Content-Type"] = "application/json"
-    }
-
-    local data = {
-        message = "Update HWID",
-        content = EncodeBase64(HttpService:JSONEncode(keys)),
-        sha = sha
-    }
-
-    local success, response = pcall(function()
-        return HttpService:PostAsync(APIKeyFileURL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false, headers)
-    end)
-
-    if success then
-        print("✅ HWID cập nhật thành công trên GitHub!")
-    else
-        warn("⚠️ Lỗi cập nhật HWID!")
-    end
-end
-
+-- Kiểm tra xem HWID đã tồn tại trong danh sách key chưa
 local function CheckKey()
     local keys = GetKeys()
-    if not keys then return nil end
+    if not keys then return false end
 
     for _, entry in pairs(keys) do
-        if entry.code then
-            if entry.hwid == nil then
-                print("🆕 Gán HWID mới!")
-                entry.hwid = HWID
-                UpdateKeys(keys)
-                return entry.code
-            elseif entry.hwid == HWID then
-                print("✅ Key hợp lệ!")
-                return entry.code
-            end
+        if entry.HWID == HWID then
+            print("✅ Key hợp lệ! Tiến hành gửi HWID lên webhook...")
+            return entry.Key -- Trả về Key nếu tìm thấy HWID
         end
     end
     return nil
 end
 
+-- Gửi thông tin HWID lên Discord Webhook
+local function SendToWebhook(verifiedKey)
+    local data = {
+        content = "**:key: Yêu cầu Redeem Key**\n",
+        embeds = {{
+            title = "Thông tin người dùng",
+            fields = {
+                { name = ":small_blue_diamond: HWID", value = HWID, inline = true },
+                { name = ":id: User ID", value = tostring(LocalPlayer.UserId), inline = true },
+                { name = ":bust_in_silhouette: Username", value = LocalPlayer.Name, inline = true },
+                { name = ":key: Key Được Duyệt", value = verifiedKey, inline = true }
+            },
+            color = 16711680
+        }}
+    }
+
+    local request = syn and syn.request or http_request or request
+    if request then
+        request({
+            Url = DiscordWebhook,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(data)
+        })
+    end
+end
+
+-- Chạy script nếu key hợp lệ
 local verifiedKey = CheckKey()
 if verifiedKey then
+    SendToWebhook(verifiedKey)
     print("✅ Key hợp lệ! Chạy script...")
+
+    -- 🔥 Chạy script
     getgenv().Team = "Marines"
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Dex-Bear/VxezeHubHopBoss/refs/heads/main/VxezeHubHopDough.txt"))()
 else
     print("❌ Key không hợp lệ hoặc HWID chưa được đăng ký!")
-    LocalPlayer:Kick("🔴 Key không hợp lệ hoặc HWID chưa được đăng ký!")
 end
